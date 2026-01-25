@@ -1,0 +1,9 @@
+/* globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Optional: body styling */
+body {
+  @apply bg-gray-50 font-sans;
+}
