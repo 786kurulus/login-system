@@ -1,53 +1,33 @@
-import { DefaultUser, NextAuthOptions } from "next-auth";
+import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import User from "@/models/User";
 import { connectDB } from "@/lib/db";
 
-// ---- Extend NextAuth types ----
-declare module "next-auth" {
-  interface Session {
-    user?: {
-      id: string;
-      name?: string | null;
-      email?: string | null;
-    };
-  }
-
-  interface User extends DefaultUser {
-    id: string;
-  }
-}
-
-declare module "next-auth/jwt" {
-  interface JWT {
-    id: string;
-  }
-}
-
-// ---- Auth Options ----
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: "Credentials",
-      credentials: { email: {}, password: {} },
+
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
 
       async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) return null;
+
         await connectDB();
 
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error("Missing credentials");
-        }
-
-        const user = await User.findOne({ email: credentials.email });
-        if (!user) throw new Error("User not found");
+        const user = await User.findOne({ email: credentials.email }).select("+password");
+        if (!user) return null;
 
         const isValid = await bcrypt.compare(
           credentials.password,
           user.password
         );
 
-        if (!isValid) throw new Error("Invalid password");
+        if (!isValid) return null;
 
         return {
           id: user._id.toString(),
@@ -59,12 +39,11 @@ export const authOptions: NextAuthOptions = {
   ],
 
   session: { strategy: "jwt" },
+
   secret: process.env.NEXTAUTH_SECRET,
 
   pages: {
     signIn: "/login",
-    signOut: "/login",
-    error: "/login?error",
   },
 
   callbacks: {
@@ -74,13 +53,10 @@ export const authOptions: NextAuthOptions = {
     },
 
     async session({ session, token }) {
-      return {
-        ...session,
-        user: {
-          ...session.user,
-          id: token.id,
-        },
-      };
+      if (session.user && token.id) {
+        session.user.id = token.id as string;
+      }
+      return session;
     },
   },
 };
