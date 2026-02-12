@@ -15,25 +15,33 @@ export const authOptions: NextAuthOptions = {
       },
 
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        try {
+          if (!credentials?.email || !credentials?.password) return null;
 
-        await connectDB();
+          await connectDB();
 
-        const user = await User.findOne({ email: credentials.email }).select("+password");
-        if (!user) return null;
+          const user = await User.findOne({
+            email: credentials.email,
+          }).select("+password");
 
-        const isValid = await bcrypt.compare(
-          credentials.password,
-          user.password
-        );
+          if (!user) return null;
 
-        if (!isValid) return null;
+          const isValid = await bcrypt.compare(
+            credentials.password,
+            user.password
+          );
 
-        return {
-          id: user._id.toString(),
-          email: user.email,
-          name: user.name,
-        };
+          if (!isValid) return null;
+
+          return {
+            id: user._id.toString(),
+            email: user.email,
+            name: user.name,
+          };
+        } catch (error) {
+          console.error("Auth error:", error);
+          return null;
+        }
       },
     }),
   ],
@@ -44,6 +52,8 @@ export const authOptions: NextAuthOptions = {
 
   pages: {
     signIn: "/login",
+    signOut: "/login",
+    error: "/login",
   },
 
   callbacks: {
