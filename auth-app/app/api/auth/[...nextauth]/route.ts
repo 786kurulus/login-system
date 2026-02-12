@@ -1,31 +1,10 @@
-import NextAuth, { DefaultSession, DefaultUser, NextAuthOptions } from "next-auth";
+import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs"; // better for Next.js environments
-import User from "../../../../models/User";
-import { connectDB } from "../../../../lib/db";
+import bcrypt from "bcryptjs";
+import User from "@/models/User";
+import { connectDB } from "@/lib/db";
 
-// ✅ Extend Session + User types safely
-declare module "next-auth" {
-  interface Session {
-    user: {
-      id: string;
-    } & DefaultSession["user"];
-  }
-
-  interface User extends DefaultUser {
-    id: string;
-  }
-}
-
-declare module "next-auth/jwt" {
-  interface JWT {
-    id?: string;
-  }
-}
-
-
-// ✅ Auth Options
-export const authOptions: NextAuthOptions = {
+const handler = NextAuth({
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -37,28 +16,22 @@ export const authOptions: NextAuthOptions = {
 
       async authorize(credentials) {
         try {
-          if (!credentials?.email || !credentials?.password) {
-            throw new Error("Missing email or password");
-          }
+          if (!credentials?.email || !credentials?.password) return null;
 
           await connectDB();
 
           const user = await User.findOne({
             email: credentials.email,
-          }).select("+password"); // ensure password is returned if hidden
+          }).select("+password");
 
-          if (!user) {
-            throw new Error("User not found");
-          }
+          if (!user) return null;
 
           const isValid = await bcrypt.compare(
             credentials.password,
             user.password
           );
 
-          if (!isValid) {
-            throw new Error("Invalid credentials");
-          }
+          if (!isValid) return null;
 
           return {
             id: user._id.toString(),
@@ -67,15 +40,13 @@ export const authOptions: NextAuthOptions = {
           };
         } catch (error) {
           console.error("Auth error:", error);
-          return null; // important for NextAuth
+          return null;
         }
       },
     }),
   ],
 
-  session: {
-    strategy: "jwt",
-  },
+  session: { strategy: "jwt" },
 
   secret: process.env.NEXTAUTH_SECRET,
 
@@ -86,24 +57,18 @@ export const authOptions: NextAuthOptions = {
   },
 
   callbacks: {
-    // store user id in token
     async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-      }
+      if (user) token.id = user.id;
       return token;
     },
 
-    // send id to client session
     async session({ session, token }) {
       if (session.user && token.id) {
-        session.user.id = token.id;
+        (session.user as any).id = token.id;
       }
       return session;
     },
   },
-};
-
-const handler = NextAuth(authOptions);
+});
 
 export { handler as GET, handler as POST };
