@@ -16,7 +16,9 @@ export const authOptions: NextAuthOptions = {
 
       async authorize(credentials) {
         try {
-          if (!credentials?.email || !credentials?.password) return null;
+          if (!credentials?.email || !credentials?.password) {
+            throw new Error("Missing email or password");
+          }
 
           await connectDB();
 
@@ -24,14 +26,14 @@ export const authOptions: NextAuthOptions = {
             email: credentials.email,
           }).select("+password");
 
-          if (!user) return null;
+          if (!user) throw new Error("User not found");
 
           const isValid = await bcrypt.compare(
             credentials.password,
             user.password
           );
 
-          if (!isValid) return null;
+          if (!isValid) throw new Error("Invalid credentials");
 
           return {
             id: user._id.toString(),
@@ -46,7 +48,9 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
 
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+  },
 
   secret: process.env.NEXTAUTH_SECRET,
 
@@ -64,7 +68,7 @@ export const authOptions: NextAuthOptions = {
 
     async session({ session, token }) {
       if (session.user && token.id) {
-        session.user.id = token.id as string;
+        (session.user as any).id = token.id;
       }
       return session;
     },
