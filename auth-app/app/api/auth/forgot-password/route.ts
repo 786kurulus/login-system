@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import crypto from "crypto";
 import User from "@/models/User";
 import { connectDB } from "@/lib/db";
-import { transporter } from "@/lib/mailer";
+import { sendEmail } from "@/lib/mailer";
 
 export async function POST(req: Request) {
   try {
@@ -12,37 +11,28 @@ export async function POST(req: Request) {
 
     const user = await User.findOne({ email });
     if (!user) {
-      return NextResponse.json(
-        { message: "User not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
-    const resetToken = crypto.randomBytes(32).toString("hex");
+    // 🔢 Generate 6-digit OTP
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-    user.resetPasswordToken = resetToken;
-    user.resetPasswordExpiry = Date.now() + 15 * 60 * 1000; // 15 min
+    user.resetCode = code;
+    user.resetCodeExpiry = Date.now() + 15 * 60 * 1000; // 15 minutes
     await user.save();
 
-    const resetUrl = `http://localhost:3000/reset-password?token=${resetToken}`;
-
-    await transporter.sendMail({
-      from: `"Kuruluş AI" <${process.env.EMAIL_USER}>`,
-      to: user.email,
-      subject: "Reset your password",
+    await sendEmail({
+      to: email,
+      subject: "Your Kuruluş AI reset code",
       html: `
-        <div style="font-family:Arial">
-          <h2>Password Reset</h2>
-          <p>Click the link below to reset your password:</p>
-          <a href="${resetUrl}">${resetUrl}</a>
-          <p>This link expires in 15 minutes.</p>
-        </div>
+        <h2>Password Reset</h2>
+        <p>Your verification code:</p>
+        <h1>${code}</h1>
+        <p>Expires in 15 minutes.</p>
       `,
     });
 
-    console.log("✅ Reset email sent to:", user.email);
-
-    return NextResponse.json({ message: "Email sent" });
+    return NextResponse.json({ message: "OTP sent" });
   } catch (error) {
     console.error("❌ Forgot password error:", error);
     return NextResponse.json(
