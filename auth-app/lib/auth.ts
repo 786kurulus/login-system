@@ -1,4 +1,4 @@
-import { NextAuthOptions } from "next-auth";
+import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import User from "@/models/User";
@@ -26,14 +26,14 @@ export const authOptions: NextAuthOptions = {
             email: credentials.email,
           }).select("+password");
 
-          if (!user) throw new Error("User not found");
+          if (!user) return null;
 
           const isValid = await bcrypt.compare(
             credentials.password,
             user.password
           );
 
-          if (!isValid) throw new Error("Invalid credentials");
+          if (!isValid) return null;
 
           return {
             id: user._id.toString(),
@@ -48,15 +48,12 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
 
-  session: {
-    strategy: "jwt",
-  },
+  session: { strategy: "jwt" },
 
   secret: process.env.NEXTAUTH_SECRET,
 
   pages: {
     signIn: "/login",
-    signOut: "/login",
     error: "/login",
   },
 
