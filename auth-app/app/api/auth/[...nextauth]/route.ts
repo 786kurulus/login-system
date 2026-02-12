@@ -3,6 +3,13 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs"; // better for Next.js environments
 import User from "../../../../models/User";
 import { connectDB } from "../../../../lib/db";
+import NextAuth from "next-auth";
+import { authOptions } from "@/lib/auth";
+
+const handler = NextAuth(authOptions);
+
+export { handler as GET, handler as POST };
+
 
 
 // ✅ Extend Session + User types safely
