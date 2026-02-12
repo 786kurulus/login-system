@@ -1,71 +1,110 @@
 import NextAuth, { DefaultSession, DefaultUser, NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs"; // better for Next.js environments
 import User from "../../../../models/User";
 import { connectDB } from "../../../../lib/db";
 
-// --- TypeScript fix: extend session and token ---
+
+// ✅ Extend Session + User types safely
 declare module "next-auth" {
   interface Session {
-    user?: {
+    user: {
       id: string;
-      name?: string | null;
-      email?: string | null;
-    };
+    } & DefaultSession["user"];
   }
+
   interface User extends DefaultUser {
     id: string;
   }
 }
+
 declare module "next-auth/jwt" {
   interface JWT {
-    id: string;
+    id?: string;
   }
 }
 
+
+// ✅ Auth Options
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: "Credentials",
-      credentials: { email: {}, password: {} },
+
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+
       async authorize(credentials) {
-        await connectDB();
+        try {
+          if (!credentials?.email || !credentials?.password) {
+            throw new Error("Missing email or password");
+          }
 
-        const user = await User.findOne({ email: credentials?.email });
-        if (!user) throw new Error("User not found");
+          await connectDB();
 
-        const isValid = await bcrypt.compare(credentials!.password, user.password);
-        if (!isValid) throw new Error("Invalid password");
+          const user = await User.findOne({
+            email: credentials.email,
+          }).select("+password"); // ensure password is returned if hidden
 
-        return { id: user._id.toString(), email: user.email, name: user.name };
+          if (!user) {
+            throw new Error("User not found");
+          }
+
+          const isValid = await bcrypt.compare(
+            credentials.password,
+            user.password
+          );
+
+          if (!isValid) {
+            throw new Error("Invalid credentials");
+          }
+
+          return {
+            id: user._id.toString(),
+            email: user.email,
+            name: user.name,
+          };
+        } catch (error) {
+          console.error("Auth error:", error);
+          return null; // important for NextAuth
+        }
       },
     }),
   ],
-  session: { strategy: "jwt" },
+
+  session: {
+    strategy: "jwt",
+  },
+
   secret: process.env.NEXTAUTH_SECRET,
+
   pages: {
     signIn: "/login",
     signOut: "/login",
-    error: "/login?error",
+    error: "/login",
   },
+
   callbacks: {
-    // store id in JWT
+    // store user id in token
     async jwt({ token, user }) {
-      if (user) token.id = user.id;
+      if (user) {
+        token.id = user.id;
+      }
       return token;
     },
-    // include id in session.user
+
+    // send id to client session
     async session({ session, token }) {
-      return {
-        ...session,
-        user: {
-          ...session.user,
-          id: token.id, // ✅ now TypeScript knows about id
-        },
-      };
+      if (session.user && token.id) {
+        session.user.id = token.id;
+      }
+      return session;
     },
   },
 };
 
 const handler = NextAuth(authOptions);
+
 export { handler as GET, handler as POST };
